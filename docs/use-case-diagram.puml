@@ -1,0 +1,104 @@
+@startuml AI Surveillance System Use Case Diagram
+
+left to right direction
+skinparam packageStyle rectangle
+skinparam actorStyle awesome
+
+title AI Surveillance System - Use Case Diagram
+
+' Actors
+actor "Admin" as Admin
+actor "Security Personnel" as Security
+
+' System boundary
+rectangle "AI Surveillance System" {
+    ' Shared Use Cases
+    package "Authentication" {
+        usecase "Login" as UC_Login
+    }
+
+    ' Admin Use Cases
+    package "Admin Functions" {
+        usecase "Monitor Performance" as UC_MonitorPerf
+        usecase "View Performance Metrics" as UC_ViewMetrics
+        usecase "View Video Processing Details" as UC_ViewVideoDetails
+        usecase "Configure Camera Settings" as UC_ConfigCamera
+        usecase "Add/Remove Cameras" as UC_ManageCameras
+        usecase "Generate Segmentation Mask" as UC_GenMask
+        usecase "Upload Sample Frame" as UC_UploadFrame
+    }
+
+    ' Security Use Cases
+    package "Security Functions" {
+        usecase "Surveillance Monitoring" as UC_Surveillance
+        usecase "View Live Camera Feeds" as UC_LiveFeeds
+        usecase "Select Camera Layout" as UC_SelectLayout
+        usecase "Performance Monitoring" as UC_PerfMon
+        usecase "View Dashboard Metrics" as UC_DashMetrics
+        usecase "Report Incidents" as UC_ReportIncident
+        usecase "Manage Cases" as UC_ManageCases
+        usecase "Search" as UC_Search
+        usecase "Search by Location" as UC_SearchLocation
+        usecase "Search by Timestamp" as UC_SearchTimestamp
+        usecase "Video Archive Management" as UC_VideoArchive
+        usecase "Upload Video" as UC_UploadVideo
+        usecase "Process Video" as UC_ProcessVideo
+        usecase "Search Videos" as UC_SearchVideos
+    }
+}
+
+' Admin relationships
+Admin --> UC_Login
+Admin --> UC_MonitorPerf
+Admin --> UC_GenMask
+
+' Admin includes
+UC_MonitorPerf ..> UC_ViewMetrics : <<include>>
+UC_MonitorPerf ..> UC_ViewVideoDetails : <<include>>
+UC_GenMask ..> UC_ConfigCamera : <<include>>
+UC_ConfigCamera ..> UC_ManageCameras : <<include>>
+UC_GenMask ..> UC_UploadFrame : <<include>>
+
+' Security relationships
+Security --> UC_Login
+Security --> UC_Surveillance
+Security --> UC_PerfMon
+Security --> UC_Search
+Security --> UC_VideoArchive
+
+' Security includes
+UC_Surveillance ..> UC_LiveFeeds : <<include>>
+UC_Surveillance ..> UC_SelectLayout : <<include>>
+UC_PerfMon ..> UC_DashMetrics : <<include>>
+UC_PerfMon ..> UC_ReportIncident : <<include>>
+UC_PerfMon ..> UC_ManageCases : <<include>>
+UC_Search ..> UC_SearchLocation : <<include>>
+UC_Search ..> UC_SearchTimestamp : <<include>>
+UC_VideoArchive ..> UC_UploadVideo : <<include>>
+UC_VideoArchive ..> UC_ProcessVideo : <<include>>
+UC_VideoArchive ..> UC_SearchVideos : <<include>>
+
+' Notes
+note right of Admin
+  Admin Functions:
+  - Dashboard (1 page)
+    * Performance Metrics
+  - Video Processing (1 page)
+    * Camera Settings
+    * Segmentation Mask
+end note
+
+note right of Security
+  Security Functions:
+  - Dashboard (1 page)
+    * Performance Metrics
+    * Report Cases & Incidents
+  - Live Surveillance (1 page)
+    * Multiple Camera View
+    * Search by Location/Time
+  - Video Archive (1 page)
+    * Upload & Process Video
+    * Search Videos
+end note
+
+@enduml
