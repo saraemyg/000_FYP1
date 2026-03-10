@@ -1,39 +1,36 @@
-# FastAPI and server
-fastapi==0.109.2
-uvicorn[standard]==0.27.1
-python-multipart==0.0.9
-websockets==12.0
-
-# Database
-sqlalchemy==2.0.25
-alembic==1.13.1
-psycopg2-binary==2.9.9
-asyncpg==0.29.0
-
-# Redis
-redis==5.0.1
-
-# Security
-python-jose[cryptography]==3.3.0
-passlib[bcrypt]==1.7.4
-bcrypt==4.1.2
-
-# Validation
-pydantic==2.6.1
-pydantic-settings==2.1.0
-email-validator==2.1.0
-
-# AI/ML (for stubs)
-opencv-python-headless==4.9.0.80
-numpy==1.26.4
-pillow==10.2.0
-
-# Utilities
-loguru==0.7.2
+# ── Core ──────────────────────────────
 python-dotenv==1.0.1
-aiofiles==23.2.1
+pydantic==2.9.2
 
-# Testing
-pytest==7.4.4
-pytest-asyncio==0.23.4
-httpx==0.26.0
+# ── Database ──────────────────────────
+sqlalchemy==2.0.36
+psycopg2-binary==2.9.10
+alembic==1.14.0
+
+# ── Cache & Pub/Sub ───────────────────
+redis==5.2.1
+
+# ── Video Processing ──────────────────
+opencv-python-headless==4.10.0.84
+numpy==1.26.4
+Pillow==11.0.0
+
+# ── Deep Learning ─────────────────────
+torch==2.5.1
+torchvision==0.20.1
+ultralytics==8.3.50          # YOLOv11-Pose
+
+# ── Web Framework ─────────────────────
+fastapi==0.115.5
+uvicorn[standard]==0.32.1
+websockets==14.1
+
+# ── Auth ──────────────────────────────
+bcrypt==4.2.1
+python-jose[cryptography]==3.3.0
+
+# ── Data ──────────────────────────────
+pandas==2.2.3
+
+# ── Monitoring ────────────────────────
+pynvml==11.5.0               # GPU monitoring
