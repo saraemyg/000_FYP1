@@ -34,3 +34,8 @@ pandas==2.2.3
 
 # ── Monitoring ────────────────────────
 pynvml==11.5.0               # GPU monitoring
+
+# ── Settings & Logging ────────────────
+pydantic-settings>=2.0.0
+loguru>=0.7.0
+python-multipart>=0.0.6

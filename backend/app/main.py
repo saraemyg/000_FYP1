@@ -8,6 +8,7 @@ from fastapi.staticfiles import StaticFiles
 import os
 
 from app.api.v1.api import api_router
+from app.api.v1.endpoints.ws_alerts import router as ws_alerts_router
 from app.core.config import settings
 from app.core.logging import setup_logging, logger
 from app.db.session import SessionLocal, engine
@@ -66,6 +67,9 @@ app.add_middleware(
 
 # Include API router
 app.include_router(api_router, prefix="/api/v1")
+
+# WebSocket routes (mounted at /ws — no /api/v1 prefix so browsers can connect easily)
+app.include_router(ws_alerts_router, prefix="/ws", tags=["WebSocket"])
 
 # Mount static files for uploads
 uploads_path = settings.UPLOAD_DIR

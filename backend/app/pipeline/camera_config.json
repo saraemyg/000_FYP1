@@ -1,0 +1,26 @@
+{
+    "_comment": "Paths are relative to backend/ root. Run pipeline from backend/ directory.",
+    "_yolo_model": "../model-intergration/yolo11n-pose.pt",
+    "_mlp_model": "models/behavior_mlp_v1_final.pth",
+
+    "cam_01": {
+        "name": "Entrance Lobby",
+        "video_path": "../model-intergration/video1.mp4",
+        "mask_path": "../model-intergration/mask_cam_001_label.npy"
+    },
+    "cam_02": {
+        "name": "Camera 2",
+        "video_path": "../model-intergration/video2.mp4",
+        "mask_path": ""
+    },
+    "cam_03": {
+        "name": "Camera 3",
+        "video_path": "../model-intergration/video3.mp4",
+        "mask_path": ""
+    },
+    "cam_04": {
+        "name": "Camera 4",
+        "video_path": "../model-intergration/video4.mp4",
+        "mask_path": ""
+    }
+}

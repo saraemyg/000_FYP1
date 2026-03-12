@@ -32,6 +32,14 @@ class Settings(BaseSettings):
     DETECTION_CONFIDENCE_THRESHOLD: float = 0.6
     ATTRIBUTE_INTERVAL_FRAMES: int = 5
 
+    # AI Model Paths (relative to backend/ — override in .env)
+    YOLO_MODEL_PATH: str = "../model-intergration/yolo11n-pose.pt"
+    MLP_MODEL_PATH: str = "models/behavior_mlp_v1_final.pth"
+    STGCN_MODEL_PATH: str = "models/stgcnpp_ntu120_xsub_hrnet_joint.pth"
+
+    # Behavior classifier: "stgcn" (pretrained, recommended) or "mlp" (custom trained)
+    BEHAVIOR_CLASSIFIER: str = "stgcn"
+
     # CORS
     CORS_ORIGINS: list[str] = ["http://localhost:5173", "http://localhost:3000"]
 

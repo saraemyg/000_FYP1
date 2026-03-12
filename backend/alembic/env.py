@@ -16,6 +16,8 @@ from app.models import (
     SegmentationMask,
     PerformanceMetric,
     SearchHistory,
+    Behavior,
+    PoseKeypoint,
 )
 
 # this is the Alembic Config object

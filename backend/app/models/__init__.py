@@ -8,6 +8,8 @@ from app.models.segmentation import SegmentationMask
 from app.models.performance import PerformanceMetric
 from app.models.search import SearchHistory
 from app.models.alert import AlertRule, TriggeredAlert
+from app.models.behavior import Behavior
+from app.models.pose_keypoint import PoseKeypoint
 
 __all__ = [
     "User",
@@ -20,4 +22,6 @@ __all__ = [
     "SearchHistory",
     "AlertRule",
     "TriggeredAlert",
+    "Behavior",
+    "PoseKeypoint",
 ]
