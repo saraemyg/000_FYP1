@@ -1,50 +1,53 @@
 import { useState, useEffect } from 'react';
+import api from '../../services/api';
+
+function inferPriority(behavior: string, confidence: number): 'high' | 'medium' | 'low' {
+  const b = behavior.toLowerCase();
+  if (['falling', 'suspicious', 'running'].includes(b) || confidence >= 0.9) return 'high';
+  if (['bending'].includes(b) || confidence >= 0.75) return 'medium';
+  return 'low';
+}
+
+interface CameraRow { label: string; location: string; high: number; medium: number; low: number; }
 
 export default function AlertPriorityChart() {
   const [hoveredBar, setHoveredBar] = useState<{ camera: string; priority: string } | null>(null);
   const [showTimeAnalysis, setShowTimeAnalysis] = useState(false);
   const [animated, setAnimated] = useState(false);
   const [hoveredHour, setHoveredHour] = useState<number | null>(null);
+  const [cameraData, setCameraData] = useState<CameraRow[]>([]);
+  const [hourlyAlerts, setHourlyAlerts] = useState<{ hour: number; count: number }[]>(
+    Array.from({ length: 24 }, (_, i) => ({ hour: i, count: 0 }))
+  );
 
   useEffect(() => {
-    // Trigger animation on mount
     setTimeout(() => setAnimated(true), 100);
+
+    api.get('/alerts/triggered?limit=200').then(res => {
+      // Aggregate by video (camera proxy) and priority
+      const camMap: Record<string, CameraRow> = {};
+      const hourCounts: number[] = new Array(24).fill(0);
+
+      for (const a of res.data) {
+        const label = (a.video_filename || 'Unknown').split('_')[0];
+        const location = a.video_filename || 'Unknown';
+        const behavior = a.matched_attributes?.behavior_type || 'unknown';
+        const priority = inferPriority(behavior, a.confidence_score || 0);
+
+        if (!camMap[label]) camMap[label] = { label, location, high: 0, medium: 0, low: 0 };
+        camMap[label][priority]++;
+
+        const h = new Date(a.triggered_at).getHours();
+        hourCounts[h]++;
+      }
+
+      const cameras = Object.values(camMap).slice(0, 6); // max 6 bars
+      if (cameras.length > 0) setCameraData(cameras);
+
+      setHourlyAlerts(hourCounts.map((count, hour) => ({ hour, count })));
+    }).catch(() => {});
   }, []);
 
-  const cameraData = [
-    { label: 'Cam A', location: 'Parking Lot', high: 45, medium: 28, low: 15 }, // Most dangerous
-    { label: 'Cam B', location: 'Corridor A', high: 25, medium: 35, low: 30 },
-    { label: 'Cam C', location: 'Entrance Lobby', high: 18, medium: 32, low: 38 },
-    { label: 'Cam D', location: 'Building B', high: 5, medium: 20, low: 60 }  // Safest
-  ];
-
-  // 24-hour alert distribution data (mock data showing peak hours)
-  const hourlyAlerts = [
-    { hour: 0, count: 3 },   // 12 AM - 1 AM
-    { hour: 1, count: 2 },   // 1 AM - 2 AM
-    { hour: 2, count: 1 },   // 2 AM - 3 AM (Safest)
-    { hour: 3, count: 1 },   // 3 AM - 4 AM
-    { hour: 4, count: 2 },   // 4 AM - 5 AM
-    { hour: 5, count: 5 },   // 5 AM - 6 AM
-    { hour: 6, count: 12 },  // 6 AM - 7 AM
-    { hour: 7, count: 18 },  // 7 AM - 8 AM
-    { hour: 8, count: 25 },  // 8 AM - 9 AM
-    { hour: 9, count: 22 },  // 9 AM - 10 AM
-    { hour: 10, count: 15 }, // 10 AM - 11 AM
-    { hour: 11, count: 14 }, // 11 AM - 12 PM
-    { hour: 12, count: 16 }, // 12 PM - 1 PM
-    { hour: 13, count: 13 }, // 1 PM - 2 PM
-    { hour: 14, count: 11 }, // 2 PM - 3 PM
-    { hour: 15, count: 14 }, // 3 PM - 4 PM
-    { hour: 16, count: 18 }, // 4 PM - 5 PM
-    { hour: 17, count: 28 }, // 5 PM - 6 PM
-    { hour: 18, count: 32 }, // 6 PM - 7 PM (Peak - Highest)
-    { hour: 19, count: 24 }, // 7 PM - 8 PM
-    { hour: 20, count: 16 }, // 8 PM - 9 PM
-    { hour: 21, count: 12 }, // 9 PM - 10 PM
-    { hour: 22, count: 8 },  // 10 PM - 11 PM
-    { hour: 23, count: 5 }   // 11 PM - 12 AM
-  ];
 
   const maxHourlyAlerts = Math.max(...hourlyAlerts.map(h => h.count));
 
@@ -58,7 +61,7 @@ export default function AlertPriorityChart() {
     return `${displayHour}${period}`;
   };
 
-  const maxValue = 100;
+  const maxValue = Math.max(...cameraData.map(c => c.high + c.medium + c.low), 1);
 
   // Calculate risk levels
   const getRiskLevel = (camera: typeof cameraData[0]) => {
@@ -67,13 +70,13 @@ export default function AlertPriorityChart() {
     return riskScore;
   };
 
-  const mostDangerous = cameraData.reduce((prev, current) => 
-    getRiskLevel(current) > getRiskLevel(prev) ? current : prev
-  );
+  const mostDangerous = cameraData.length > 0
+    ? cameraData.reduce((prev, current) => getRiskLevel(current) > getRiskLevel(prev) ? current : prev)
+    : null;
 
-  const safest = cameraData.reduce((prev, current) => 
-    getRiskLevel(current) < getRiskLevel(prev) ? current : prev
-  );
+  const safest = cameraData.length > 0
+    ? cameraData.reduce((prev, current) => getRiskLevel(current) < getRiskLevel(prev) ? current : prev)
+    : null;
 
   return (
     <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-6 transition-colors">
@@ -305,7 +308,7 @@ export default function AlertPriorityChart() {
           </div>
 
           {/* Risk Assessment Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-6">
+          {mostDangerous && safest && <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-6">
             {/* Highest Risk Area */}
             <div className="bg-gradient-to-br from-red-50 to-red-100 dark:from-red-900/20 dark:to-red-800/20 border-2 border-red-200 dark:border-red-800 rounded-lg p-4 transition-colors">
               <div className="flex items-start gap-3">
@@ -359,7 +362,7 @@ export default function AlertPriorityChart() {
                 </div>
               </div>
             </div>
-          </div>
+          </div>}
         </>
       )}
     </div>

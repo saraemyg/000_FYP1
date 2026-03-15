@@ -2,20 +2,18 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import LoginForm from "../components/Auth/LoginForm";
 import Logo from "../components/Auth/Logo";
+import { useAuth } from "../hooks/useAuth";
 
-interface LoginProps {
-  onLogin: () => void;
-}
-
-export default function Login({ onLogin }: LoginProps) {
+export default function Login() {
   const navigate = useNavigate();
+  const { login } = useAuth();
   const [error, setError] = useState("");
 
-  const handleSubmit = (username: string, password: string) => {
-    if (username === "admin" && password === "admin123") {
-      onLogin();
-      navigate("/security-cam");
-    } else {
+  const handleSubmit = async (username: string, password: string) => {
+    try {
+      await login({ username, password });
+      navigate("/security");
+    } catch {
       setError("Invalid username or password");
     }
   };

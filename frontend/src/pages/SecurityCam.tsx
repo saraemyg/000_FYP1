@@ -1,62 +1,40 @@
-import { useState } from 'react';
-import NavigationBar from '../components/Security/NavigationBar';
+import { useState, useEffect } from 'react';
 import CameraFilters from '../components/Security/CameraFilters';
 import CameraFeed, { Camera } from '../components/Security/CameraFeed';
 import AlertPanel from '../components/Security/AlertPanel';
+import api from '../services/api';
 
-interface SecurityCamProps {
-  onLogout: () => void;
-}
+export default function SecurityCam() {
+  const [allCameras, setAllCameras] = useState<Camera[]>([]);
+  const [selectedCamera, setSelectedCamera] = useState<Camera>({} as Camera);
+  const [filteredCameras, setFilteredCameras] = useState<Camera[]>([]);
 
-export default function SecurityCam({ onLogout }: SecurityCamProps) {
-  const allCameras: Camera[] = [
-    {
-      id: 'cam-1',
-      name: 'Cam A - Parking Lot',
-      location: 'Parking Lot',
-      status: 'active',
-      // ============================================
-      // ADD YOUR CAMERA FEED URL HERE
-      // Example: imageUrl: 'https://your-server.com/camera-feed/cam-1.jpg'
-      // Or live stream: imageUrl: 'http://192.168.1.100:8080/video'
-      // Leave empty ('') to show placeholder
-      // ============================================
-      imageUrl: 'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcTFcLhIRR7a2JQLVO83MRr4N3PO8JLKgjKLkA&s'
-    },
-    {
-      id: 'cam-2',
-      name: 'Cam B - Corridor A',
-      location: 'Corridor A',
-      status: 'active',
-      // ============================================
-      // ADD YOUR CAMERA FEED URL HERE
-      // ============================================
-      imageUrl: 'https://cdn.hashnode.com/res/hashnode/image/upload/v1693714471850/5fd2053d-8cb3-4483-b7da-61c3bf41400c.jpeg'
-    },
-    {
-      id: 'cam-3',
-      name: 'Cam C - Entrance Lobby',
-      location: 'Entrance Lobby',
-      status: 'active',
-      // ============================================
-      // ADD YOUR CAMERA FEED URL HERE
-      // ============================================
-      imageUrl: 'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRFTVqGYFYZFKlRcOWLeHCrGXef8kZSZCXLZA&s'
-    },
-    {
-      id: 'cam-4',
-      name: 'Cam D - Building B',
-      location: 'Building B',
-      status: 'active',
-      // ============================================
-      // ADD YOUR CAMERA FEED URL HERE
-      // ============================================
-      imageUrl: 'https://viso.ai/wp-content/uploads/2023/01/smart-city-computer-vision-yolov7-deep-learning-1060x596.jpg'
-    }
-  ];
-
-  const [selectedCamera, setSelectedCamera] = useState<Camera>(allCameras[0]);
-  const [filteredCameras, setFilteredCameras] = useState<Camera[]>(allCameras);
+  useEffect(() => {
+    api.get('/cameras?include_inactive=false')
+      .then(res => {
+        const mapped: Camera[] = res.data.map((c: any, i: number) => ({
+          id: String(c.camera_id),
+          name: `Cam ${String.fromCharCode(65 + i)} - ${c.camera_name}`,
+          location: c.location || c.camera_name,
+          status: c.is_active ? 'active' : 'inactive',
+          imageUrl: '',  // No live feed yet — pipeline will provide this
+        }));
+        setAllCameras(mapped);
+        setFilteredCameras(mapped);
+        if (mapped.length > 0) setSelectedCamera(mapped[0]);
+      })
+      .catch(() => {
+        // Fallback to placeholder cameras if API fails
+        const fallback: Camera[] = [
+          { id: 'cam-1', name: 'Cam A - Entrance Lobby', location: 'Entrance Lobby', status: 'active', imageUrl: '' },
+          { id: 'cam-2', name: 'Cam B - Parking Lot', location: 'Parking Lot', status: 'active', imageUrl: '' },
+        ];
+        setAllCameras(fallback);
+        setFilteredCameras(fallback);
+        setSelectedCamera(fallback[0]);
+      })
+      .finally(() => {});
+  }, []);
 
   const handleFilterChange = (cameraName: string) => {
     if (cameraName === 'All Cameras') {
@@ -81,8 +59,6 @@ export default function SecurityCam({ onLogout }: SecurityCamProps) {
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900 transition-colors">
-      <NavigationBar onLogout={onLogout} />
-      
       <div className="max-w-[1920px] mx-auto p-6">
         <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-6">Security Camera Feed</h1>
         

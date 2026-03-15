@@ -27,6 +27,17 @@ from datetime import datetime, timedelta
 # ── path setup ────────────────────────────────────────────────────────────────
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+# Must override DATABASE_URL BEFORE importing anything from app.db
+# because session.py reads it at import time via pydantic settings.
+# When running locally (not inside Docker), the DB host is localhost, not "db".
+_LOCAL_DB = "postgresql://surveillance_user:secure_password@localhost:5432/surveillance_db"
+_early = argparse.ArgumentParser(add_help=False)
+_early.add_argument("--db-url", default=None)
+_early_args, _ = _early.parse_known_args()
+_db_url = _early_args.db_url or os.environ.get("DATABASE_URL") or _LOCAL_DB
+os.environ["DATABASE_URL"] = _db_url
+print(f"Connecting to: {_db_url[:60]}...")
+
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from app.db.session import SessionLocal, engine
 from app.db.base import Base
@@ -50,10 +61,10 @@ LOWER_COLORS       = ["black", "blue", "grey", "brown", "white"]
 GENDERS            = ["male", "female"]
 
 CAMERA_DEFS = [
-    {"name": "Entrance Lobby",      "location": "Main Building — Ground Floor", "resolution": "1920x1080", "fps": 30.0},
-    {"name": "Parking Lot A",       "location": "Outdoor West",                 "resolution": "1280x720",  "fps": 25.0},
-    {"name": "Corridor B2",         "location": "Block B — Level 2",            "resolution": "1920x1080", "fps": 30.0},
-    {"name": "Emergency Exit North","location": "North Wing",                   "resolution": "1280x720",  "fps": 25.0},
+    {"camera_name": "Entrance Lobby",      "location": "Main Building — Ground Floor", "resolution": "1920x1080", "fps": 30.0},
+    {"camera_name": "Parking Lot A",       "location": "Outdoor West",                 "resolution": "1280x720",  "fps": 25.0},
+    {"camera_name": "Corridor B2",         "location": "Block B — Level 2",            "resolution": "1920x1080", "fps": 30.0},
+    {"camera_name": "Emergency Exit North","location": "North Wing",                   "resolution": "1280x720",  "fps": 25.0},
 ]
 
 VIDEO_DEFS_PER_CAMERA = [
@@ -66,6 +77,7 @@ def parse_args():
     p = argparse.ArgumentParser()
     p.add_argument("--clear", action="store_true", help="Delete all seeded data before inserting")
     p.add_argument("--scale", choices=["small", "medium", "large"], default="medium")
+    p.add_argument("--db-url", default=None, help="Override DATABASE_URL (default: localhost:5432)")
     return p.parse_args()
 
 
@@ -127,7 +139,7 @@ def seed(db, scale: str):
     print("Seeding cameras...")
     cameras = []
     for cam_def in CAMERA_DEFS:
-        existing = db.query(Camera).filter(Camera.camera_name == cam_def["name"]).first()
+        existing = db.query(Camera).filter(Camera.camera_name == cam_def["camera_name"]).first()
         if existing:
             cameras.append(existing)
             continue
@@ -261,8 +273,8 @@ def seed(db, scale: str):
             )
             db.add(kp)
 
-            # Collect candidates for alert seeding (only high-risk behaviors)
-            if beh_type in ("falling", "suspicious", "running") and beh_conf > 0.65:
+            # Collect candidates for alert seeding (all 7 behavior types)
+            if beh_conf > 0.65:
                 matching_rules = [r for r in rules if beh_type in r.name.lower() and r.is_active]
                 if matching_rules:
                     alert_candidates.append((det.detection_id, matching_rules[0], beh_conf, vid.video_id, ts_in_video))
@@ -301,7 +313,7 @@ def seed(db, scale: str):
             rule_id=rule.rule_id,
             detection_id=det_id,
             video_id=vid_id,
-            matched_attributes={"behavior": rule.name.lower().split()[0]},
+            matched_attributes={"behavior_type": rule.name.lower().split()[0]},
             confidence_score=beh_conf,
             timestamp_in_video=ts_in_vid,
             is_read=is_read,

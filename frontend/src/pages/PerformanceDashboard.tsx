@@ -1,13 +1,8 @@
-import NavigationBar from '../components/Security/NavigationBar';
 import MetricsSummary from '../components/Performance/MetricsSummary';
 import PerformanceGraphs from '../components/Performance/PerformanceGraphs';
 import PipelineStatus from '../components/Performance/PipelineStatus';
 
-interface PerformanceDashboardProps {
-  onLogout: () => void;
-}
-
-export default function PerformanceDashboard({ onLogout }: PerformanceDashboardProps) {
+export default function PerformanceDashboard() {
   const handleExportCSV = () => {
     // Generate mock performance data for CSV export
     const headers = [
@@ -65,8 +60,6 @@ export default function PerformanceDashboard({ onLogout }: PerformanceDashboardP
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900 transition-colors">
-      <NavigationBar onLogout={onLogout} />
-      
       <div className="max-w-[1920px] mx-auto p-6">
         <div className="flex items-center justify-between mb-6">
           <div>

@@ -79,5 +79,6 @@ uploads/
 
 # Docker
 docker-compose.override.yml
+docker/docker-compose.yml
 *.mp4
 model-intergration/

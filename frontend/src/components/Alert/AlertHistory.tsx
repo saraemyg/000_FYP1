@@ -1,4 +1,5 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
+import api from '../../services/api';
 
 interface Alert {
   id: string;
@@ -10,48 +11,20 @@ interface Alert {
   status: 'PENDING' | 'ACKNOWLEDGED';
 }
 
-// Generate 50 mock alerts for pagination demo
-const generateMockAlerts = (): Alert[] => {
-  const cameras = ['Corridor A', 'Entrance Lobby', 'Parking Lot', 'Building B'];
-  const behaviors = ['RUN', 'BEND', 'STAND', 'WALK', 'SIT'];
-  const priorities: ('HIGH' | 'MEDIUM' | 'LOW')[] = ['HIGH', 'MEDIUM', 'LOW'];
-  const statuses: ('PENDING' | 'ACKNOWLEDGED')[] = ['PENDING', 'ACKNOWLEDGED'];
-  
-  const alerts: Alert[] = [];
-  
-  for (let i = 1; i <= 50; i++) {
-    const camera = cameras[Math.floor(Math.random() * cameras.length)];
-    const behavior = behaviors[Math.floor(Math.random() * behaviors.length)];
-    const priority = priorities[Math.floor(Math.random() * priorities.length)];
-    const status = statuses[Math.floor(Math.random() * statuses.length)];
-    const confidence = Math.floor(Math.random() * 20) + 80; // 80-100%
-    
-    // Generate timestamps going back in time
-    const hoursAgo = Math.floor(i / 2);
-    const date = new Date(Date.now() - hoursAgo * 3600000);
-    
-    alerts.push({
-      id: `#${i}`,
-      timestamp: date.toLocaleString('en-US', {
-        month: 'short',
-        day: 'numeric',
-        year: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit',
-        hour12: true
-      }),
-      camera,
-      behavior,
-      confidence,
-      priority,
-      status
-    });
-  }
-  
-  return alerts;
-};
+function inferPriority(behavior: string, confidence: number): 'HIGH' | 'MEDIUM' | 'LOW' {
+  const highBehaviors = ['falling', 'suspicious', 'running'];
+  const medBehaviors = ['bending'];
+  const b = behavior.toLowerCase();
+  if (highBehaviors.includes(b) || confidence >= 0.9) return 'HIGH';
+  if (medBehaviors.includes(b) || confidence >= 0.75) return 'MEDIUM';
+  return 'LOW';
+}
 
 export default function AlertHistory() {
+  const [alerts, setAlerts] = useState<Alert[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+
   const [searchQuery, setSearchQuery] = useState('');
   const [cameraFilter, setCameraFilter] = useState('All Cameras');
   const [behaviorFilter, setBehaviorFilter] = useState('All Behaviors');
@@ -60,53 +33,68 @@ export default function AlertHistory() {
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
 
-  const allAlerts = useMemo(() => generateMockAlerts(), []);
+  useEffect(() => {
+    setLoading(true);
+    api.get('/alerts/triggered?limit=200')
+      .then(res => {
+        const mapped: Alert[] = res.data.map((a: any) => {
+          const behavior = a.matched_attributes?.behavior_type || 'unknown';
+          const confidence = Math.round((a.confidence_score || 0) * 100);
+          const priority = inferPriority(behavior, a.confidence_score || 0);
+          const status = a.is_acknowledged ? 'ACKNOWLEDGED' : 'PENDING';
+          return {
+            id: `#${a.alert_id}`,
+            timestamp: new Date(a.triggered_at).toLocaleString('en-US', {
+              month: 'short', day: 'numeric', year: 'numeric',
+              hour: '2-digit', minute: '2-digit', hour12: true,
+            }),
+            camera: a.video_filename || 'Unknown',
+            behavior: behavior.toUpperCase(),
+            confidence,
+            priority,
+            status,
+          };
+        });
+        setAlerts(mapped);
+      })
+      .catch(() => setError('Failed to load alerts.'))
+      .finally(() => setLoading(false));
+  }, []);
 
-  // Apply filters
+  const cameras = ['All Cameras', ...Array.from(new Set(alerts.map(a => a.camera)))];
+  const behaviors = ['All Behaviors', ...Array.from(new Set(alerts.map(a => a.behavior)))];
+  const priorities = ['All Priorities', 'HIGH', 'MEDIUM', 'LOW'];
+  const statuses = ['All Statuses', 'PENDING', 'ACKNOWLEDGED'];
+
   const filteredAlerts = useMemo(() => {
-    return allAlerts.filter(alert => {
-      const matchesSearch = 
+    return alerts.filter(alert => {
+      const matchesSearch =
         alert.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
         alert.camera.toLowerCase().includes(searchQuery.toLowerCase()) ||
         alert.behavior.toLowerCase().includes(searchQuery.toLowerCase());
-      
       const matchesCamera = cameraFilter === 'All Cameras' || alert.camera === cameraFilter;
       const matchesBehavior = behaviorFilter === 'All Behaviors' || alert.behavior === behaviorFilter;
       const matchesPriority = priorityFilter === 'All Priorities' || alert.priority === priorityFilter;
       const matchesStatus = statusFilter === 'All Statuses' || alert.status === statusFilter;
-      
       return matchesSearch && matchesCamera && matchesBehavior && matchesPriority && matchesStatus;
     });
-  }, [allAlerts, searchQuery, cameraFilter, behaviorFilter, priorityFilter, statusFilter]);
+  }, [alerts, searchQuery, cameraFilter, behaviorFilter, priorityFilter, statusFilter]);
 
-  // Pagination
   const totalPages = Math.ceil(filteredAlerts.length / itemsPerPage);
   const startIndex = (currentPage - 1) * itemsPerPage;
-  const endIndex = startIndex + itemsPerPage;
-  const currentAlerts = filteredAlerts.slice(startIndex, endIndex);
+  const currentAlerts = filteredAlerts.slice(startIndex, startIndex + itemsPerPage);
 
-  // Export to CSV
   const handleExportCSV = () => {
     const headers = ['ID', 'Timestamp', 'Camera', 'Behavior', 'Confidence', 'Priority', 'Status'];
     const csvContent = [
       headers.join(','),
-      ...filteredAlerts.map(alert => 
-        [
-          alert.id,
-          `"${alert.timestamp}"`,
-          `"${alert.camera}"`,
-          alert.behavior,
-          `${alert.confidence}%`,
-          alert.priority,
-          alert.status
-        ].join(',')
-      )
+      ...filteredAlerts.map(a =>
+        [a.id, `"${a.timestamp}"`, `"${a.camera}"`, a.behavior, `${a.confidence}%`, a.priority, a.status].join(',')
+      ),
     ].join('\n');
-
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement('a');
-    const url = URL.createObjectURL(blob);
-    link.setAttribute('href', url);
+    link.setAttribute('href', URL.createObjectURL(blob));
     link.setAttribute('download', `alert_history_${new Date().toISOString().split('T')[0]}.csv`);
     link.style.visibility = 'hidden';
     document.body.appendChild(link);
@@ -114,28 +102,11 @@ export default function AlertHistory() {
     document.body.removeChild(link);
   };
 
-  const getPriorityColor = (priority: string) => {
-    switch (priority) {
-      case 'HIGH':
-        return 'bg-red-500 text-white';
-      case 'MEDIUM':
-        return 'bg-yellow-500 text-white';
-      case 'LOW':
-        return 'bg-green-500 text-white';
-      default:
-        return 'bg-gray-500 text-white';
-    }
-  };
+  const getPriorityColor = (p: string) =>
+    p === 'HIGH' ? 'bg-red-500 text-white' : p === 'MEDIUM' ? 'bg-yellow-500 text-white' : 'bg-green-500 text-white';
 
-  const getStatusColor = (status: string) => {
-    return status === 'PENDING' ? 'bg-yellow-500 text-white' : 'bg-blue-600 text-white';
-  };
-
-  // Get unique values for filters
-  const cameras = ['All Cameras', ...Array.from(new Set(allAlerts.map(a => a.camera)))];
-  const behaviors = ['All Behaviors', ...Array.from(new Set(allAlerts.map(a => a.behavior)))];
-  const priorities = ['All Priorities', 'HIGH', 'MEDIUM', 'LOW'];
-  const statuses = ['All Statuses', 'PENDING', 'ACKNOWLEDGED'];
+  const getStatusColor = (s: string) =>
+    s === 'PENDING' ? 'bg-yellow-500 text-white' : 'bg-blue-600 text-white';
 
   return (
     <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-6">
@@ -144,7 +115,7 @@ export default function AlertHistory() {
           <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Alert History</h3>
           <p className="text-sm text-gray-500 dark:text-gray-400">View and analyze historical alert data</p>
         </div>
-        <button 
+        <button
           onClick={handleExportCSV}
           className="flex items-center gap-2 px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
         >
@@ -162,170 +133,96 @@ export default function AlertHistory() {
           </svg>
           <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Filters</span>
         </div>
-        
         <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={(e) => {
-              setSearchQuery(e.target.value);
-              setCurrentPage(1);
-            }}
+          <input type="text" value={searchQuery} onChange={e => { setSearchQuery(e.target.value); setCurrentPage(1); }}
             placeholder="Search alerts..."
-            className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-          />
-          
-          <select
-            value={cameraFilter}
-            onChange={(e) => {
-              setCameraFilter(e.target.value);
-              setCurrentPage(1);
-            }}
-            className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-          >
-            {cameras.map(camera => (
-              <option key={camera} value={camera}>{camera}</option>
-            ))}
-          </select>
-
-          <select
-            value={behaviorFilter}
-            onChange={(e) => {
-              setBehaviorFilter(e.target.value);
-              setCurrentPage(1);
-            }}
-            className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-          >
-            {behaviors.map(behavior => (
-              <option key={behavior} value={behavior}>{behavior}</option>
-            ))}
-          </select>
-
-          <select
-            value={priorityFilter}
-            onChange={(e) => {
-              setPriorityFilter(e.target.value);
-              setCurrentPage(1);
-            }}
-            className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-          >
-            {priorities.map(priority => (
-              <option key={priority} value={priority}>{priority}</option>
-            ))}
-          </select>
-
-          <select
-            value={statusFilter}
-            onChange={(e) => {
-              setStatusFilter(e.target.value);
-              setCurrentPage(1);
-            }}
-            className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-          >
-            {statuses.map(status => (
-              <option key={status} value={status}>{status}</option>
-            ))}
-          </select>
+            className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          {[
+            { value: cameraFilter, setter: setCameraFilter, options: cameras },
+            { value: behaviorFilter, setter: setBehaviorFilter, options: behaviors },
+            { value: priorityFilter, setter: setPriorityFilter, options: priorities },
+            { value: statusFilter, setter: setStatusFilter, options: statuses },
+          ].map(({ value, setter, options }, i) => (
+            <select key={i} value={value} onChange={e => { setter(e.target.value); setCurrentPage(1); }}
+              className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+              {options.map(o => <option key={o} value={o}>{o}</option>)}
+            </select>
+          ))}
         </div>
       </div>
 
-      <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
-        Showing {startIndex + 1}-{Math.min(endIndex, filteredAlerts.length)} of {filteredAlerts.length} results
-      </p>
+      {loading ? (
+        <div className="text-center py-10 text-gray-500">Loading alerts...</div>
+      ) : error ? (
+        <div className="text-center py-10 text-red-500">{error}</div>
+      ) : (
+        <>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
+            Showing {startIndex + 1}–{Math.min(startIndex + itemsPerPage, filteredAlerts.length)} of {filteredAlerts.length} results
+          </p>
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead className="bg-gray-50 dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700">
+                <tr>
+                  {['ID', 'Timestamp', 'Camera', 'Behavior', 'Confidence', 'Priority', 'Status', 'Actions'].map(h => (
+                    <th key={h} className={`px-4 py-3 text-left text-xs font-medium text-gray-700 dark:text-gray-300 ${h === 'Actions' ? 'text-center' : ''}`}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-200">
+                {currentAlerts.map(alert => (
+                  <tr key={alert.id} className="hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
+                    <td className="px-4 py-3 text-sm text-gray-900 dark:text-white">{alert.id}</td>
+                    <td className="px-4 py-3 text-sm text-gray-600 dark:text-gray-400">{alert.timestamp}</td>
+                    <td className="px-4 py-3 text-sm text-gray-900 dark:text-white">{alert.camera}</td>
+                    <td className="px-4 py-3 text-sm font-semibold text-gray-900 dark:text-white">{alert.behavior}</td>
+                    <td className="px-4 py-3 text-sm text-gray-900 dark:text-white">{alert.confidence}%</td>
+                    <td className="px-4 py-3">
+                      <span className={`px-2 py-1 rounded text-xs font-bold ${getPriorityColor(alert.priority)}`}>{alert.priority}</span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className={`px-2 py-1 rounded text-xs font-medium ${getStatusColor(alert.status)}`}>{alert.status}</span>
+                    </td>
+                    <td className="px-4 py-3 text-center">
+                      <button className="text-gray-600 dark:text-gray-400 hover:text-gray-900 transition-colors">
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                        </svg>
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
 
-      <div className="overflow-x-auto">
-        <table className="w-full">
-          <thead className="bg-gray-50 dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700">
-            <tr>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 dark:text-gray-300">ID</th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 dark:text-gray-300">Timestamp</th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 dark:text-gray-300">Camera</th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 dark:text-gray-300">Behavior</th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 dark:text-gray-300">Confidence</th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 dark:text-gray-300">Priority</th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 dark:text-gray-300">Status</th>
-              <th className="px-4 py-3 text-center text-xs font-medium text-gray-700 dark:text-gray-300">Actions</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-200">
-            {currentAlerts.map((alert) => (
-              <tr key={alert.id} className="hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
-                <td className="px-4 py-3 text-sm text-gray-900 dark:text-white">{alert.id}</td>
-                <td className="px-4 py-3 text-sm text-gray-600 dark:text-gray-400">{alert.timestamp}</td>
-                <td className="px-4 py-3 text-sm text-gray-900 dark:text-white">{alert.camera}</td>
-                <td className="px-4 py-3 text-sm">
-                  <span className="font-semibold text-gray-900 dark:text-white">{alert.behavior}</span>
-                </td>
-                <td className="px-4 py-3 text-sm text-gray-900 dark:text-white">{alert.confidence}%</td>
-                <td className="px-4 py-3">
-                  <span className={`px-2 py-1 rounded text-xs font-bold ${getPriorityColor(alert.priority)}`}>
-                    {alert.priority}
-                  </span>
-                </td>
-                <td className="px-4 py-3">
-                  <span className={`px-2 py-1 rounded text-xs font-medium ${getStatusColor(alert.status)}`}>
-                    {alert.status}
-                  </span>
-                </td>
-                <td className="px-4 py-3 text-center">
-                  <button className="text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:text-white transition-colors">
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                    </svg>
-                  </button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-
-      {/* Pagination */}
-      <div className="mt-4 flex items-center justify-between">
-        <div className="text-sm text-gray-600 dark:text-gray-400">
-          Page {currentPage} of {totalPages}
-        </div>
-        <div className="flex gap-2">
-          <button
-            onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
-            disabled={currentPage === 1}
-            className="px-3 py-1 border border-gray-300 dark:border-gray-600 rounded text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-          >
-            Previous
-          </button>
-          {Array.from({ length: totalPages }, (_, i) => i + 1)
-            .filter(page => 
-              page === 1 || 
-              page === totalPages || 
-              (page >= currentPage - 1 && page <= currentPage + 1)
-            )
-            .map((page, index, array) => (
-              <div key={page} className="flex items-center">
-                {index > 0 && array[index - 1] !== page - 1 && (
-                  <span className="px-2 text-gray-500 dark:text-gray-400">...</span>
-                )}
-                <button
-                  onClick={() => setCurrentPage(page)}
-                  className={`px-3 py-1 border rounded text-sm font-medium transition-colors ${
-                    currentPage === page
-                      ? 'bg-blue-600 text-white border-blue-600'
-                      : 'border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700'
-                  }`}
-                >
-                  {page}
-                </button>
-              </div>
-            ))}
-          <button
-            onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
-            disabled={currentPage === totalPages}
-            className="px-3 py-1 border border-gray-300 dark:border-gray-600 rounded text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-          >
-            Next
-          </button>
-        </div>
-      </div>
+          <div className="mt-4 flex items-center justify-between">
+            <div className="text-sm text-gray-600 dark:text-gray-400">Page {currentPage} of {totalPages}</div>
+            <div className="flex gap-2">
+              <button onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1}
+                className="px-3 py-1 border border-gray-300 dark:border-gray-600 rounded text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
+                Previous
+              </button>
+              {Array.from({ length: totalPages }, (_, i) => i + 1)
+                .filter(p => p === 1 || p === totalPages || (p >= currentPage - 1 && p <= currentPage + 1))
+                .map((page, idx, arr) => (
+                  <div key={page} className="flex items-center">
+                    {idx > 0 && arr[idx - 1] !== page - 1 && <span className="px-2 text-gray-500">...</span>}
+                    <button onClick={() => setCurrentPage(page)}
+                      className={`px-3 py-1 border rounded text-sm font-medium transition-colors ${currentPage === page ? 'bg-blue-600 text-white border-blue-600' : 'border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50'}`}>
+                      {page}
+                    </button>
+                  </div>
+                ))}
+              <button onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages}
+                className="px-3 py-1 border border-gray-300 dark:border-gray-600 rounded text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
+                Next
+              </button>
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 }

@@ -1,18 +1,11 @@
-import NavigationBar from '../components/Security/NavigationBar';
 import BehaviorDistribution from '../components/Alert/BehaviorDistribution';
 import AlertPriorityChart from '../components/Alert/AlertPriorityChart';
 import AlertConfiguration from '../components/Alert/AlertConfiguration';
 import AlertHistory from '../components/Alert/AlertHistory';
 
-interface AlertDashboardProps {
-  onLogout: () => void;
-}
-
-export default function AlertDashboard({ onLogout }: AlertDashboardProps) {
+export default function AlertDashboard() {
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900 transition-colors">
-      <NavigationBar onLogout={onLogout} />
-      
       <div className="max-w-[1920px] mx-auto p-6">
         <div className="mb-6">
           <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Alert Dashboard</h1>

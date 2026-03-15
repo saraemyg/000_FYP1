@@ -229,7 +229,6 @@ def list_triggered_alerts(
         db.query(TriggeredAlert, AlertRule, Video)
         .join(AlertRule, TriggeredAlert.rule_id == AlertRule.rule_id)
         .join(Video, TriggeredAlert.video_id == Video.video_id)
-        .filter(AlertRule.user_id == current_user.user_id)
     )
 
     if unread_only:
@@ -393,50 +392,35 @@ def get_alert_stats(
     Returns:
         Alert statistics
     """
-    # Count rules
+    # Count rules (global — all roles can see system-wide stats)
     total_rules = (
         db.query(func.count(AlertRule.rule_id))
-        .filter(AlertRule.user_id == current_user.user_id)
         .scalar() or 0
     )
 
     active_rules = (
         db.query(func.count(AlertRule.rule_id))
-        .filter(AlertRule.user_id == current_user.user_id, AlertRule.is_active == True)
+        .filter(AlertRule.is_active == True)
         .scalar() or 0
     )
 
-    # Get user's rule IDs
-    rule_ids = (
-        db.query(AlertRule.rule_id)
-        .filter(AlertRule.user_id == current_user.user_id)
-        .all()
+    # Count all triggered alerts (visible to all authenticated users)
+    total_triggered = (
+        db.query(func.count(TriggeredAlert.alert_id))
+        .scalar() or 0
     )
-    rule_ids = [r[0] for r in rule_ids]
 
-    # Count triggered alerts
-    total_triggered = 0
-    unread_alerts = 0
-    unacknowledged_alerts = 0
+    unread_alerts = (
+        db.query(func.count(TriggeredAlert.alert_id))
+        .filter(TriggeredAlert.is_read == False)
+        .scalar() or 0
+    )
 
-    if rule_ids:
-        total_triggered = (
-            db.query(func.count(TriggeredAlert.alert_id))
-            .filter(TriggeredAlert.rule_id.in_(rule_ids))
-            .scalar() or 0
-        )
-
-        unread_alerts = (
-            db.query(func.count(TriggeredAlert.alert_id))
-            .filter(TriggeredAlert.rule_id.in_(rule_ids), TriggeredAlert.is_read == False)
-            .scalar() or 0
-        )
-
-        unacknowledged_alerts = (
-            db.query(func.count(TriggeredAlert.alert_id))
-            .filter(TriggeredAlert.rule_id.in_(rule_ids), TriggeredAlert.is_acknowledged == False)
-            .scalar() or 0
-        )
+    unacknowledged_alerts = (
+        db.query(func.count(TriggeredAlert.alert_id))
+        .filter(TriggeredAlert.is_acknowledged == False)
+        .scalar() or 0
+    )
 
     return AlertStats(
         total_rules=total_rules,
